@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SafeZone Alert System 🚨</title>
+ 
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-app-compat.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.6.1/firebase-database-compat.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDpA_8sFKJP9lgOGS5LQ6HPzJwPyBS2x9U&libraries=places"></script>
+ 
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+ 
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+ 
+  <script src="firebase-config.js"></script>
+
+  <script src="qr/qrcode.min.js"></script>
+
+  <script src="script.js"></script>
+
+  <script type="text/babel">
+
+    const SAFETY_TIPS = [
+      "Tell someone you trust where you are going.",
+      "If you're scared, call a trusted adult right away.",
+      "Do not talk to strangers or accept lifts.",
+      "Keep your phone charged in case of emergencies.",
+      "Remember emergency numbers: Police 100, Ambulance 102.",
+      "If you feel unsafe, go to a crowded place.",
+      "Always inform your parents before leaving from school.",
+      "Use pedestrian crossings and footpaths only.",
+      "If hurt, alert an adult or security guard.",
+      "In emergency, stay calm and ask any nearby help.",
+    ];
+
+    const getRandomTip = () => SAFETY_TIPS[Math.floor(Math.random() * SAFETY_TIPS.length)];
+
+    
+    const SafetyTipCard = () => {
+      const [tip, setTip] = React.useState(getRandomTip());
+
+      return (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 shadow-sm animate-fade-in">
+          {/* Shield Icon from Lucide (inline SVG) */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#60a5fa"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+          <span className="flex-1 text-[15px] font-medium text-blue-900">{tip}</span>
+          <button
+            onClick={() => setTip(getRandomTip())}
+            className="bg-gray-100 text-gray-700 text-sm font-semibold px-3 py-1 rounded-md hover:bg-gray-200 transition-all"
+          >
+            New Tip
+          </button>
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [statusMsg, setStatusMsg] = React.useState("Status: Waiting…");
+      const [map, setMap] = React.useState(null);
+      const [marker, setMarker] = React.useState(null);
+      const [secretCode, setSecretCode] = React.useState("");
+      const [showSecretModal, setShowSecretModal] = React.useState(false);
+      const qrBoxRef = React.useRef(null);
+      const mapRef = React.useRef(null);
+
+
+      React.useEffect(() => {
+        emailjs.init("q9dPXKqDqqpl2RD6F");
+      }, []);
+
+  
+      React.useEffect(() => {
+        const initMap = new google.maps.Map(mapRef.current, {
+          center: { lat: 28.7041, lng: 77.1025 },
+          zoom: 10,
+        });
+        setMap(initMap);
+      }, []);
+
+ 
+      const handleAlert = () => {
+        if (!navigator.geolocation) {
+          alert("Geolocation not supported on this device!");
+          return;
+        }
+        setStatusMsg("Fetching location…");
+        navigator.geolocation.getCurrentPosition(
+          (position) => showLocation(position, false),
+          showError,
+          { enableHighAccuracy: true }
+        );
+      };
+
+ 
+      const handleSecretCode = (e) => {
+        e.preventDefault();
+        if (secretCode === "1234") {
+          setStatusMsg("Sending silent alert…");
+          navigator.geolocation.getCurrentPosition(
+            (position) => showLocation(position, true),
+            showError,
+            { enableHighAccuracy: true }
+          );
+          setShowSecretModal(false);
+          setSecretCode("");
+        } else {
+          alert("Invalid secret code!");
+        }
+      };
+
+  
+      const showLocation = (position, isSilent) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setStatusMsg("Location fetched!");
+
+  
+        map.setCenter({ lat, lng });
+        map.setZoom(15);
+        if (marker) marker.setMap(null);
+        const newMarker = new google.maps.Marker({
+          position: { lat, lng },
+          map,
+          icon: isSilent ? {
+            url: "https://img.icons8.com/color/48/000000/silent.png",
+            scaledSize: new google.maps.Size(32, 32),
+          } : null,
+        });
+        setMarker(newMarker);
+
+  
+        const service = new google.maps.places.PlacesService(map);
+        service.nearbySearch(
+          {
+            location: { lat, lng },
+            radius: 5000,
+            type: ["hospital", "police", "fire_station"],
+          },
+          (results, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK) {
+              results.forEach((place) => {
+                new google.maps.Marker({
+                  position: place.geometry.location,
+                  map,
+                  title: place.name,
+                  icon: {
+                    url: `https://img.icons8.com/color/48/000000/${
+                      place.types.includes("hospital") ? "hospital" :
+                      place.types.includes("police") ? "police" : "fire-station"
+                    }.png`,
+                    scaledSize: new google.maps.Size(32, 32),
+                  },
+                });
+              });
+            }
+          }
+        );
+
+        const locationURL = `https://maps.google.com/?q=${lat},${lng}`;
+
+     
+        firebase.database().ref("alerts").push({
+          latitude: lat,
+          longitude: lng,
+          timestamp: new Date().toLocaleString(),
+          silent: isSilent,
+        });
+
+    
+        emailjs
+          .send(
+            "service_shlhs0v",
+            "template_37d7eha",
+            {
+              name: isSilent ? "Silent Alert (Hardik)" : "Hardik",
+              time: new Date().toLocaleString(),
+              location_url: locationURL,
+              email: "jain22hardik@gmail.com",
+            }
+          )
+          .then(() => {
+            setStatusMsg("✅ Alert sent successfully!");
+          })
+          .catch((err) => {
+            console.error("EmailJS error:", err);
+            setStatusMsg("❌ Email failed – try again!");
+          });
+
+      
+        qrBoxRef.current.innerHTML = "";
+        new QRCode(qrBoxRef.current, {
+          text: locationURL,
+          width: 160,
+          height: 160,
+        });
+      };
+
+    
+      const showError = (error) => {
+        console.error("Geolocation error:", error);
+        setStatusMsg("⚠️ Unable to fetch your location.");
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-blue-100 to-red-100 flex flex-col items-center p-4 font-sans">
+          <header className="text-center mb-6 animate-pulse">
+            <h1 className="text-4xl md:text-5xl font-bold text-red-600 flex items-center justify-center gap-2">
+              🛡️ SafeZone Alert System
+            </h1>
+            <p className="text-lg text-gray-700 mt-2">Stay safe with one tap!</p>
+          </header>
+
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-6 space-y-6">
+            {/* Safety Tip Card */}
+            <SafetyTipCard />
+
+            {/* Map */}
+            <div ref={mapRef} className="w-full h-80 rounded-lg border-4 border-blue-500"></div>
+
+            {/* Emergency Button */}
+            <button
+              onClick={handleAlert}
+              className="w-full bg-red-600 text-white text-2xl font-bold py-4 rounded-full hover:bg-red-700 transition-all animate-pulse"
+            >
+              🔴 HELP ME!
+            </button>
+
+            {/* Status Message */}
+            <p className="text-lg font-semibold text-center text-gray-800">{statusMsg}</p>
+
+            {/* QR Code */}
+            <div ref={qrBoxRef} className="flex justify-center"></div>
+
+            {/* Secret Code Button */}
+            <button
+              onClick={() => setShowSecretModal(true)}
+              className="w-full bg-blue-600 text-white text-lg font-semibold py-3 rounded-full hover:bg-blue-700 transition-all"
+            >
+              🤫 Enter Secret Code
+            </button>
+          </div>
+
+          {/* Secret Code Modal */}
+          {showSecretModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-lg w-11/12 max-w-md">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Enter Secret Code</h2>
+                <form onSubmit={handleSecretCode} className="space-y-4">
+                  <input
+                    type="password"
+                    value={secretCode}
+                    onChange={(e) => setSecretCode(e.target.value)}
+                    placeholder="Enter code (e.g., 1234)"
+                    className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  />
+                  <div className="flex gap-4">
+                    <button
+                      type="submit"
+                      className="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700"
+                    >
+                      Submit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSecretModal(false)}
+                      className="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+  
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
